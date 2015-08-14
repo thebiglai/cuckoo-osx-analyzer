@@ -9,5 +9,6 @@ class Bash(Package):
     """ Bash shell script analysys package. """
 
     def prepare(self):
-        self.args = [self.target] + self.args
-        self.target = "/bin/bash"
+        self.target = '/bin/bash {0}'.format(self.target)
+        # self.args = [self.target] + self.args
+        # self.target = "/bin/bash"

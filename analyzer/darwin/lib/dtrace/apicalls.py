@@ -36,13 +36,18 @@ def apicalls(target, **kwargs):
     with open(os.devnull, "w") as null:
         _ = Popen(cmd, stdout=null, stderr=null, cwd=current_directory())
 
-    for entry in filelines(output_file):
-        value = entry.strip()
-        if "## apicalls.d done ##" in value:
-            break
-        if len(value) == 0:
-            continue
-        yield _parse_entry(value)
+    with open('/Users/cloudmark/yield.txt', 'w+') as f:
+        for entry in filelines(output_file):
+            value = entry.strip()
+            if "## apicalls.d done ##" in value:
+                break
+            if len(value) == 0:
+             continue
+            f.write(str(_parse_entry(value)))
+            f.flush()
+            import time
+            time.sleep(1)
+            yield _parse_entry(value)
     output_file.close()
     os.remove(probes_file)
 
@@ -64,17 +69,18 @@ def _dtrace_command_line(target, **kwargs):
     cmd += ["-DOUTPUT_FILE=\"%s\"" % output_file.name]
 
     run_as_root = kwargs.get("run_as_root", False)
-
+    # Sanitizing the path was actually causing the commands to fail when called with dtrace.
     if "args" in kwargs:
-        target_cmd = "%s %s" % (sanitize_path(target), " ".join(kwargs["args"]))
+        target_cmd = "%s %s" % (target, " ".join(kwargs["args"]))
     else:
-        target_cmd = sanitize_path(target)
+        target_cmd = target
     # When we don't want to run the target as root, we have to drop privileges
     # with `sudo -u current_user` right before calling the target.
     if not run_as_root:
         target_cmd = "sudo -u %s %s" % (getuser(), target_cmd)
         cmd += ["-DSUDO=1"]
     cmd += ["-c", target_cmd]
+
     return cmd
 
 
@@ -82,7 +88,8 @@ def _parse_entry(entry):
     parsed = json.loads(entry.replace("\\0", ""))
     api       = parsed['api']
     args      = _stringify_args(parsed['args'])
-    retval    = parsed['retval']
+    # retval    = parsed['retval']
+    retval    = _strinfigy_single(parsed['retval'])
     # Convert milliseconds to floating point seconds
     timestamp = float(parsed['timestamp']) / 1000
     pid       = parsed['pid']
@@ -91,6 +98,14 @@ def _parse_entry(entry):
     errno     = parsed['errno']
     return apicall(api, args, retval, timestamp, pid, ppid, tid, errno)
 
+def _strinfigy_single(arg):
+    """ When executing a url the retval that gets returned are larger than
+    what mongodb can handle (8-byte ints). So we need to convert this singleton as well.
+    """
+    # TODO: move into the existing _stringify_args so we don't have duplicate functions
+    # Passing in parsed['retval'] is a non-iterable so it will crap out as it is currently written.
+    if isinstance(arg, (int, long)):
+        return "%#lx" % arg
 
 def _stringify_args(args):
     """ Converts each argument into a string.

@@ -4,6 +4,8 @@
 # of the MIT license. See the LICENSE file for details.
 
 import logging
+import os, thread
+import time
 from sys import stderr
 from hashlib import sha256
 from xmlrpclib import Server
@@ -17,6 +19,9 @@ from lib.core.constants import PATHS
 from lib.core.packages import choose_package_class
 from lib.core.osx import set_wallclock
 from lib.core.host import CuckooHost
+
+import multiprocessing
+from multiprocessing import Pool, Manager
 
 class Macalyzer(object):
     """Cuckoo OS X analyser.
@@ -37,6 +42,20 @@ class Macalyzer(object):
         _setup_logging()
         self._detect_target()
 
+    def capture(self):
+        """Screen Capture
+        When calling this func, run it in a thread so we can get continuous screen shots.
+        """
+        self.log.info('Starting capture thread.')
+        shot_path = PATHS['shots']
+        img_count = 1
+        while True:
+            os.system('screencapture -t jpg {0}/image{1}.jpg'.
+                      format(shot_path,img_count))
+            img_count += 1
+            time.sleep(2)
+
+
     def run(self):
         """Run analysis.
         """
@@ -44,7 +63,8 @@ class Macalyzer(object):
 
         self.log.debug("Starting analyzer from %s", getcwd())
         self.log.debug("Storing results at: %s", PATHS["root"])
-
+        print PATHS["root"]
+        thread.start_new_thread(self.capture, ())
         package = self._setup_analysis_package()
 
         if self.config.clock:
@@ -56,6 +76,22 @@ class Macalyzer(object):
     def _complete(self):
         for f in self.files_to_upload:
             self._upload_file(f)
+        # Loop through all directories in /tmp/<tmp dir> and upload the files
+        for key in PATHS.keys():
+            if key == "root":
+                continue
+            # Get the abs path of files
+            if not os.path.isdir(PATHS[key]):
+                continue
+            files_for_upload = [os.path.join(PATHS[key], x) for x in os.listdir(PATHS[key])]
+            print files_for_upload
+            if files_for_upload:
+                for f in files_for_upload:
+                    try:
+                        self._upload_file(f, key)
+                    except Exception:
+                        self.log.error("Error uploading {0}".format(f))
+
         return True
 
     #
@@ -70,14 +106,19 @@ class Macalyzer(object):
 
     def _setup_analysis_package(self):
         # Do we have a suggestion about an analysis package?
+        print self.config.category
         if self.config.package:
             suggestion = self.config.package
-        elif self.config.category != "file":
-            suggestion = "url"
+        elif self.config.category == 'url':
+            suggestion = 'safari'
         else:
             suggestion = None
         # Try to figure out what analysis package to use with this target
         kwargs = {"suggestion" : suggestion}
+        if suggestion == 'safari':
+            # file_type and file_name are not generate if a url is passed in.
+            self.config.file_type = None
+            self.config.file_name = None
         package_class = choose_package_class(self.config.file_type,
                                              self.config.file_name, **kwargs)
         if not package_class:
@@ -93,7 +134,7 @@ class Macalyzer(object):
         package.start()
         self.files_to_upload = package.touched_files
 
-    def _upload_file(self, filepath):
+    def _upload_file(self, filepath, dest='file'):
         if not path.isfile(filepath):
             return
         # Check whether we've already dumped this file - in that case skip it
@@ -105,7 +146,7 @@ class Macalyzer(object):
             self.log.info("Error dumping file from path \"%s\": %s", filepath, e)
             return
         filename = "%s_%s" % (hashsum[:16], path.basename(filepath))
-        upload_path = path.join("files", filename)
+        upload_path = path.join(dest, filename)
 
         try:
             upload_to_host(filepath, upload_path)
@@ -118,9 +159,10 @@ def _create_result_folders():
         if path.exists(folder):
             continue
         try:
+            print('creating {0}'.format(folder))
             makedirs(folder)
         except OSError:
-            pass
+            print('failed to create {0}'.format(folder))
 
 
 def _setup_logging():
