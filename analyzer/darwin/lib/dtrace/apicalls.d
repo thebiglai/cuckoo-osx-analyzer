@@ -1,5 +1,6 @@
 #pragma D option destructive
 #pragma D option quiet
+#pragma D option switchrate=10hz
 /* apicalls.d
  *
  * Copyright (C) 2015 Dmitry Rodionov
