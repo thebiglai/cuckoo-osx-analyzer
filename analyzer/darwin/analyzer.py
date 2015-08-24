@@ -19,9 +19,7 @@ from lib.core.constants import PATHS
 from lib.core.packages import choose_package_class
 from lib.core.osx import set_wallclock
 from lib.core.host import CuckooHost
-
-import multiprocessing
-from multiprocessing import Pool, Manager
+from modules.auxiliary.screenshot import screenshot
 
 class Macalyzer(object):
     """Cuckoo OS X analyser.
@@ -51,7 +49,7 @@ class Macalyzer(object):
         img_count = 1
         while True:
             os.system('screencapture -t jpg {0}/image{1}.jpg'.
-                      format(shot_path,img_count))
+                      format(shot_path, img_count))
             img_count += 1
             time.sleep(2)
 
@@ -60,37 +58,43 @@ class Macalyzer(object):
         """Run analysis.
         """
         self.bootstrap()
-
         self.log.debug("Starting analyzer from %s", getcwd())
         self.log.debug("Storing results at: %s", PATHS["root"])
-        print PATHS["root"]
-        thread.start_new_thread(self.capture, ())
+        # thread.start_new_thread(self.capture, ())
+        # Start screen captures
+        shot = screenshot()
         package = self._setup_analysis_package()
 
         if self.config.clock:
             set_wallclock(self.config.clock)
+
         self._analysis(package)
 
+        shot.stop()
         return self._complete()
 
     def _complete(self):
+
         for f in self.files_to_upload:
             self._upload_file(f)
+        # We still might need this sine the logic wasn't built in my Dmitry
         # Loop through all directories in /tmp/<tmp dir> and upload the files
-        for key in PATHS.keys():
-            if key == "root":
-                continue
-            # Get the abs path of files
-            if not os.path.isdir(PATHS[key]):
-                continue
-            files_for_upload = [os.path.join(PATHS[key], x) for x in os.listdir(PATHS[key])]
-            print files_for_upload
-            if files_for_upload:
-                for f in files_for_upload:
-                    try:
-                        self._upload_file(f, key)
-                    except Exception:
-                        self.log.error("Error uploading {0}".format(f))
+        # import shutil
+        # shutil.move('/Users/cloudmark/cmd.txt', '{0}'.format(PATHS['shots']))
+        # for key in PATHS.keys():
+        #     if key == "root":
+        #         continue
+        #     # Get the abs path of files
+        #     if not os.path.isdir(PATHS[key]):
+        #         continue
+        #     files_for_upload = [os.path.join(PATHS[key], x) for x in os.listdir(PATHS[key])]
+        #     print files_for_upload
+        #     if files_for_upload:
+        #         for f in files_for_upload:
+        #             try:
+        #                 self._upload_file(f, key)
+        #             except Exception:
+        #                 self.log.error("Error uploading {0}".format(f))
 
         return True
 

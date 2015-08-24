@@ -80,6 +80,10 @@ def _dtrace_command_line(target, **kwargs):
         target_cmd = "sudo -u %s %s" % (getuser(), target_cmd)
         cmd += ["-DSUDO=1"]
     cmd += ["-c", target_cmd]
+    import time
+    with open('/Users/cloudmark/cmd.txt', 'w+') as f:
+        f.write(str(cmd))
+    time.sleep(60)
 
     return cmd
 
