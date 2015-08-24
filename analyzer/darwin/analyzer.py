@@ -63,6 +63,7 @@ class Macalyzer(object):
         # thread.start_new_thread(self.capture, ())
         # Start screen captures
         shot = screenshot()
+        shot.start()
         package = self._setup_analysis_package()
 
         if self.config.clock:
